@@ -103,35 +103,41 @@ function restSVG(kind) {
   return `<svg viewBox="0 0 80 70" style="width:100%;max-width:120px;height:auto" role="img" aria-label="silencio">${L}${r}</svg>`;
 }
 
-/* Diagrama del trombón (estilo plano, dibujo propio): la vara se desplaza y la barra morada marca la posición p (1 a 7).
-   o.mini = sin rótulos pequeños; o.hideNum = oculta los números (para ejercicios). */
+/* Diagrama del trombón (dibujo propio, estilo plano). La vara completa se desplaza: la barra morada marca
+   dónde empieza la vara exterior en la posición p (1 a 7). o.mini = sin rótulos; o.hideNum = oculta los números. */
 function slideSVG(p, o) {
   o = o || {};
-  const K = 5, X0 = 312, xb = q => X0 + CMS[q - 1] * K, B = xb(p);
-  const G = '#f6b93b', D = '#d99a22', GR = '#a7a3b0', PU = '#5b2a86';
-  const tube = (x1, x2, y) => `<rect x="${x1}" y="${y - 10}" width="${x2 - x1}" height="20" rx="3" fill="${D}"/><rect x="${x1}" y="${y - 8}" width="${x2 - x1}" height="16" rx="2" fill="${G}"/>`;
-  const fer = (x, y) => `<rect x="${x}" y="${y - 12}" width="9" height="24" rx="2" fill="${GR}"/>`;
-  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${o.mini ? '0 20 700 250' : '0 20 700 280'}" role="img" aria-label="Trombón con la vara en posición ${p}" style="width:100%;height:auto;display:block">`;
-  // campana (parte de atrás)
-  s += `<path d="M100 104C230 104 320 96 374 34C396 72 396 128 374 170C320 120 230 118 100 118Z" fill="${G}" stroke="${D}" stroke-width="2.5" stroke-linejoin="round"/>`;
-  s += `<ellipse cx="376" cy="102" rx="10" ry="68" fill="#ffd36b" stroke="${D}" stroke-width="2.5"/>`;
-  // curva izquierda y tubo fijo
-  s += `<path d="M100 111H66A25 25 0 0 0 66 161H310" fill="none" stroke="${D}" stroke-width="20" stroke-linecap="butt"/><path d="M100 111H66A25 25 0 0 0 66 161H310" fill="none" stroke="${G}" stroke-width="16" stroke-linecap="butt"/>`;
-  // tubo fijo inferior y boquilla
-  s += tube(212, 312, 212);
-  s += `<rect x="172" y="200" width="22" height="24" rx="3" fill="${GR}"/><rect x="194" y="206" width="18" height="12" fill="#8d8998"/>`;
-  s += fer(300, 161) + fer(300, 212);
-  // vara móvil
-  s += tube(312, B + 46, 161) + tube(312, B + 46, 212);
-  s += `<path d="M${B + 46} 161A25.5 25.5 0 0 1 ${B + 46} 212" fill="none" stroke="${D}" stroke-width="20"/><path d="M${B + 46} 161A25.5 25.5 0 0 1 ${B + 46} 212" fill="none" stroke="${G}" stroke-width="16"/>`;
-  s += `<rect x="${B - 4}" y="153" width="8" height="67" rx="3" fill="${PU}"/>`;
-  // números / marcas
+  const K = 3.2, XS = 292, L = 178, YB = 100, YU = 140, YL = 200;
+  const xm = q => XS + CMS[q - 1] * K, M = xm(p), E = M + L;
+  const G = '#f9b934', D = '#dc9a1f', GR = '#d4d4d9', GD = '#9a9aa6', PU = '#5b2a86';
+  const tube = (x1, x2, y, h) => `<rect x="${x1}" y="${y - h / 2 - 2}" width="${x2 - x1}" height="${h + 4}" rx="3" fill="${D}"/><rect x="${x1}" y="${y - h / 2}" width="${x2 - x1}" height="${h}" rx="2" fill="${G}"/>`;
+  const inner = (x1, x2, y) => `<rect x="${x1}" y="${y - 6}" width="${x2 - x1}" height="12" fill="${GD}"/><rect x="${x1}" y="${y - 4}" width="${x2 - x1}" height="8" fill="${GR}"/>`;
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 10 700 280" role="img" aria-label="Trombón con la vara en posición ${p}" style="width:100%;height:auto;display:block">`;
+  // campana
+  s += `<path d="M104 ${YB - 7}C250 ${YB - 8} 360 ${YB - 18} 414 14C442 54 442 118 414 160C360 118 250 ${YB + 6} 104 ${YB + 7}Z" fill="${G}" stroke="${D}" stroke-width="3" stroke-linejoin="round"/>`;
+  s += `<ellipse cx="416" cy="87" rx="12" ry="73" fill="#e39f26" stroke="${D}" stroke-width="3"/>`;
+  // curva izquierda (campana ↔ vara) y conexiones
+  const bend = `M108 ${YB}H${50 + 49}A49 49 0 0 0 ${99} ${YL}H${XS}`;
+  s += `<path d="M108 ${YB}H99A49 49 0 0 0 99 ${YL}H${XS}" fill="none" stroke="${D}" stroke-width="18"/><path d="M108 ${YB}H99A49 49 0 0 0 99 ${YL}H${XS}" fill="none" stroke="${G}" stroke-width="14"/>`;
+  s += tube(104, 112, (YB + YL) / 2, YL - YB - 4);
+  s += tube(258, 266, (YU + YL) / 2, YL - YU - 4);
+  // boquilla y tubo superior fijo
+  s += `<rect x="196" y="${YU - 13}" width="26" height="26" rx="4" fill="${GR}" stroke="${GD}" stroke-width="2"/><rect x="222" y="${YU - 6}" width="30" height="12" fill="${GR}" stroke="${GD}" stroke-width="1.5"/>`;
+  s += tube(252, XS, YU, 14);
+  // tubos internos (plateados) visibles entre las zapatas y la vara
+  s += inner(XS, M, YU) + inner(XS, M, YL);
+  s += `<rect x="${XS - 8}" y="${YU - 11}" width="8" height="22" rx="2" fill="${GD}"/><rect x="${XS - 8}" y="${YL - 11}" width="8" height="22" rx="2" fill="${GD}"/>`;
+  // vara exterior (completa, con su curva)
+  s += tube(M, E, YU, 14) + tube(M, E, YL, 14);
+  s += `<path d="M${E} ${YU}A${(YL - YU) / 2} ${(YL - YU) / 2} 0 0 1 ${E} ${YL}" fill="none" stroke="${D}" stroke-width="18"/><path d="M${E} ${YU}A${(YL - YU) / 2} ${(YL - YU) / 2} 0 0 1 ${E} ${YL}" fill="none" stroke="${G}" stroke-width="14"/>`;
+  s += `<rect x="${M - 4}" y="${YU - 12}" width="8" height="${YL - YU + 24}" rx="3" fill="${PU}"/>`;
+  // números
   for (let q = 1; q <= 7; q++) {
-    const x = xb(q), on = q === p;
-    if (q !== p) s += `<line x1="${x}" x2="${x}" y1="224" y2="236" stroke="#d4cfdd" stroke-width="1.5"/>`;
-    if (!o.hideNum) s += `<text x="${x}" y="262" font-size="${on ? 22 : 17}" font-weight="${on ? 800 : 500}" text-anchor="middle" fill="${on ? PU : '#aaa4b6'}">${q}</text>`;
-    else if (on) s += `<line x1="${x}" x2="${x}" y1="224" y2="244" stroke="${PU}" stroke-width="3"/>`;
+    const x = xm(q), on = q === p;
+    if (!on) s += `<line x1="${x}" x2="${x}" y1="${YL + 16}" y2="${YL + 34}" stroke="#d4cfdd" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    if (!o.hideNum) s += `<text x="${x}" y="${YL + 62}" font-size="${on ? 24 : 18}" font-weight="${on ? 800 : 500}" text-anchor="middle" fill="${on ? PU : '#aaa4b6'}">${q}</text>`;
+    else if (on) s += `<line x1="${x}" x2="${x}" y1="${YL + 16}" y2="${YL + 44}" stroke="${PU}" stroke-width="3"/>`;
   }
-  if (!o.mini) s += `<text x="${xb(1)}" y="284" font-size="12" text-anchor="middle" fill="#6a5f7a">cerrada</text><text x="${xb(7)}" y="284" font-size="12" text-anchor="middle" fill="#6a5f7a">extendida</text><text x="60" y="210" font-size="12" text-anchor="middle" fill="#6a5f7a">campana</text>`;
+  if (!o.mini) s += `<text x="${xm(1)}" y="${YL + 84}" font-size="12" text-anchor="middle" fill="#6a5f7a">vara cerrada</text><text x="${xm(7)}" y="${YL + 84}" font-size="12" text-anchor="middle" fill="#6a5f7a">vara extendida</text>`;
   return s + '</svg>';
 }
