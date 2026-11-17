@@ -103,31 +103,35 @@ function restSVG(kind) {
   return `<svg viewBox="0 0 80 70" style="width:100%;max-width:120px;height:auto" role="img" aria-label="silencio">${L}${r}</svg>`;
 }
 
-/* Diagrama horizontal del trombón con la vara en la posición p (1 a 7). */
+/* Diagrama del trombón (estilo plano, dibujo propio): la vara se desplaza y la barra morada marca la posición p (1 a 7).
+   o.mini = sin rótulos pequeños; o.hideNum = oculta los números (para ejercicios). */
 function slideSVG(p, o) {
   o = o || {};
-  const X0 = 400, K = 3.6, E = X0 + CMS[p - 1] * K;
-  const br = '#e2b23c', st = '#8a6a10';
-  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${o.mini ? '0 70 700 110' : '0 0 700 270'}" role="img" aria-label="Trombón con la vara en posición ${p}" style="width:100%;height:auto;display:block">`;
-  s += `<path d="M130 134C100 137 85 151 48 173L48 81C85 103 100 117 130 120Z" fill="${br}" stroke="${st}" stroke-width="2"/>`;
-  s += `<ellipse cx="48" cy="127" rx="9" ry="46" fill="none" stroke="${st}" stroke-width="1.5"/>`;
-  s += `<rect x="130" y="105" width="72" height="44" rx="12" fill="${br}" stroke="${st}" stroke-width="2"/>`;
-  s += `<g stroke-linecap="round" fill="none"><line x1="202" y1="112" x2="385" y2="112" stroke="${st}" stroke-width="10"/><line x1="202" y1="142" x2="385" y2="142" stroke="${st}" stroke-width="10"/><line x1="202" y1="112" x2="385" y2="112" stroke="${br}" stroke-width="6"/><line x1="202" y1="142" x2="385" y2="142" stroke="${br}" stroke-width="6"/>`;
-  s += `<line x1="385" y1="112" x2="${E}" y2="112" stroke="${st}" stroke-width="7"/><line x1="385" y1="142" x2="${E}" y2="142" stroke="${st}" stroke-width="7"/><line x1="385" y1="112" x2="${E}" y2="112" stroke="#f3cf6b" stroke-width="3.5"/><line x1="385" y1="142" x2="${E}" y2="142" stroke="#f3cf6b" stroke-width="3.5"/>`;
-  s += `<path d="M${E} 112A15 15 0 0 1 ${E} 142" stroke="${st}" stroke-width="7"/><path d="M${E} 112A15 15 0 0 1 ${E} 142" stroke="#f3cf6b" stroke-width="3.5"/></g>`;
-  s += `<line x1="${E - 46}" x2="${E - 46}" y1="106" y2="148" stroke="${st}" stroke-width="4"/><circle cx="${E - 46}" cy="127" r="9" fill="#5b2a86"/>`;
-  if (!o.mini) {
-    s += `<text x="${E - 46}" y="94" font-size="13" text-anchor="middle" fill="#5b2a86" font-weight="700">mano</text>`;
-    s += `<text x="48" y="205" font-size="12" text-anchor="middle" fill="#6a5f7a">campana</text><text x="166" y="98" font-size="12" text-anchor="middle" fill="#6a5f7a">cuerpo</text><text x="290" y="98" font-size="12" text-anchor="middle" fill="#6a5f7a">vara</text>`;
-    s += `<line x1="${X0}" x2="${X0 + 56 * K}" y1="214" y2="214" stroke="#ddd3ea" stroke-width="2"/>`;
-    CMS.forEach((c, i) => {
-      const x = X0 + c * K, on = i + 1 === p;
-      s += `<line x1="${x}" x2="${x}" y1="146" y2="205" stroke="${on ? '#c9962b' : '#ddd3ea'}" stroke-width="${on ? 2.5 : 1}" stroke-dasharray="${on ? '0' : '3 3'}"/>`;
-      s += `<circle cx="${x}" cy="228" r="13" fill="${on ? '#5b2a86' : '#fff'}" stroke="#c9962b" stroke-width="2"/><text x="${x}" y="233" font-size="14" font-weight="700" text-anchor="middle" fill="${on ? '#fff' : '#241a33'}">${i + 1}</text>`;
-    });
-    s += `<text x="${X0}" y="262" font-size="11" text-anchor="middle" fill="#6a5f7a">cerrada</text><text x="${X0 + 56 * K}" y="262" font-size="11" text-anchor="middle" fill="#6a5f7a">extendida</text>`;
-  } else {
-    if (!o.hideNum) s += `<text x="${X0 + 220}" y="108" font-size="26" font-weight="800" fill="#5b2a86">${p}</text>`;
+  const K = 5, X0 = 312, xb = q => X0 + CMS[q - 1] * K, B = xb(p);
+  const G = '#f6b93b', D = '#d99a22', GR = '#a7a3b0', PU = '#5b2a86';
+  const tube = (x1, x2, y) => `<rect x="${x1}" y="${y - 10}" width="${x2 - x1}" height="20" rx="3" fill="${D}"/><rect x="${x1}" y="${y - 8}" width="${x2 - x1}" height="16" rx="2" fill="${G}"/>`;
+  const fer = (x, y) => `<rect x="${x}" y="${y - 12}" width="9" height="24" rx="2" fill="${GR}"/>`;
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${o.mini ? '0 20 700 250' : '0 20 700 280'}" role="img" aria-label="Trombón con la vara en posición ${p}" style="width:100%;height:auto;display:block">`;
+  // campana (parte de atrás)
+  s += `<path d="M100 104C230 104 320 96 374 34C396 72 396 128 374 170C320 120 230 118 100 118Z" fill="${G}" stroke="${D}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  s += `<ellipse cx="376" cy="102" rx="10" ry="68" fill="#ffd36b" stroke="${D}" stroke-width="2.5"/>`;
+  // curva izquierda y tubo fijo
+  s += `<path d="M100 111H66A25 25 0 0 0 66 161H310" fill="none" stroke="${D}" stroke-width="20" stroke-linecap="butt"/><path d="M100 111H66A25 25 0 0 0 66 161H310" fill="none" stroke="${G}" stroke-width="16" stroke-linecap="butt"/>`;
+  // tubo fijo inferior y boquilla
+  s += tube(212, 312, 212);
+  s += `<rect x="172" y="200" width="22" height="24" rx="3" fill="${GR}"/><rect x="194" y="206" width="18" height="12" fill="#8d8998"/>`;
+  s += fer(300, 161) + fer(300, 212);
+  // vara móvil
+  s += tube(312, B + 46, 161) + tube(312, B + 46, 212);
+  s += `<path d="M${B + 46} 161A25.5 25.5 0 0 1 ${B + 46} 212" fill="none" stroke="${D}" stroke-width="20"/><path d="M${B + 46} 161A25.5 25.5 0 0 1 ${B + 46} 212" fill="none" stroke="${G}" stroke-width="16"/>`;
+  s += `<rect x="${B - 4}" y="153" width="8" height="67" rx="3" fill="${PU}"/>`;
+  // números / marcas
+  for (let q = 1; q <= 7; q++) {
+    const x = xb(q), on = q === p;
+    if (q !== p) s += `<line x1="${x}" x2="${x}" y1="224" y2="236" stroke="#d4cfdd" stroke-width="1.5"/>`;
+    if (!o.hideNum) s += `<text x="${x}" y="262" font-size="${on ? 22 : 17}" font-weight="${on ? 800 : 500}" text-anchor="middle" fill="${on ? PU : '#aaa4b6'}">${q}</text>`;
+    else if (on) s += `<line x1="${x}" x2="${x}" y1="224" y2="244" stroke="${PU}" stroke-width="3"/>`;
   }
+  if (!o.mini) s += `<text x="${xb(1)}" y="284" font-size="12" text-anchor="middle" fill="#6a5f7a">cerrada</text><text x="${xb(7)}" y="284" font-size="12" text-anchor="middle" fill="#6a5f7a">extendida</text><text x="60" y="210" font-size="12" text-anchor="middle" fill="#6a5f7a">campana</text>`;
   return s + '</svg>';
 }
