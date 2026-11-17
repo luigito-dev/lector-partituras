@@ -32,14 +32,13 @@ input[type=range]{flex:1 1 160px;accent-color:var(--ac)}
  <div class="row">
   <span class="btn ac">📷 Tomar foto<input id="cam" type="file" accept="image/*" capture="environment"></span>
   <span class="btn">🖼️ Subir imagen<input id="gal" type="file" accept="image/*"></span>
-  <button class="sec" id="live">🎥 Cámara en vivo</button>
+  <span class="btn">📁 Subir archivo<input id="fil" type="file" accept="image/*,application/pdf,.pdf"></span>
   <button class="sec" id="demo">🎵 Ejemplo</button>
  </div>
  <img id="pv" alt="Partitura cargada">
- <video id="vd" playsinline autoplay muted style="display:none;width:100%;border-radius:10px;margin-top:8px"></video>
- <div class="row" id="vdb" style="display:none;margin-top:8px"><button id="snap" class="ac">📸 Capturar</button><button id="vstop" class="sec">Cerrar cámara</button></div>
+ <embed id="pdfv" type="application/pdf" style="display:none;width:100%;height:60vh;border-radius:10px;margin-top:8px">
  <div class="row" style="margin-top:8px"><button id="read" class="ac" disabled>✨ Leer partitura</button></div>
- <p class="sub" style="margin:8px 0 0">Si los botones de foto no abren nada en tu celular (algunos visores lo bloquean): escribe la canción abajo nota por nota, o mándame la foto por el chat de Claude. Otras opciones: usa “Cámara en vivo”, pega la imagen (mantener pulsado → Pegar) o arrástrala aquí.</p>
+ <p class="sub" style="margin:8px 0 0">Puedes tomar una foto, subir una imagen o subir un archivo (imagen o PDF). También puedes pegar una imagen (mantener pulsado → Pegar) o arrastrarla aquí. Si nada se abre en tu visor, escribe la canción abajo nota por nota.</p>
  <div id="msg"></div>
 </div>
 
@@ -173,16 +172,14 @@ $('play').onclick=play;$('rew').onclick=()=>{stop();mark(-1);$('wrap').scrollTo(
 $('upd').onclick=()=>{stop();setText($('tx').value)};
 $('tp').oninput=e=>{$('tv').textContent=e.target.value;if(playing){stop();mark(-1)}};
 $('trb').onchange=()=>{stop();draw()};
-function pick(e){const f=e.target.files[0];if(!f)return;setFile(f);return;$('read').disabled=false;msg('Foto lista. Pulsa “Leer partitura”.')}
-$('cam').onchange=pick;$('gal').onchange=pick;
-function setFile(f){file=f;const fr=new FileReader();fr.onload=()=>{$('pv').src=fr.result;$('pv').style.display='block'};fr.readAsDataURL(f);$('read').disabled=false;msg('Foto lista. Pulsa “Leer partitura”.')}
-let stream=null;
-function closeCam(){if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}$('vd').style.display='none';$('vdb').style.display='none'}
-$('live').onclick=async()=>{try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});$('vd').srcObject=stream;$('vd').style.display='block';$('vdb').style.display='flex';msg('Apunta a la partitura y pulsa Capturar.')}catch(e){msg('Tu visor no permite usar la cámara aquí. Pega la imagen, o envíala por el chat de Claude y te paso las notas.')}};
-$('snap').onclick=()=>{const v=$('vd'),c=document.createElement('canvas');c.width=v.videoWidth;c.height=v.videoHeight;c.getContext('2d').drawImage(v,0,0);c.toBlob(b=>{closeCam();setFile(new File([b],'foto.jpg',{type:'image/jpeg'}))},'image/jpeg',.9)};
-$('vstop').onclick=closeCam;
+function setFile(f){file=f;const pdf=f.type==='application/pdf'||/\.pdf$/i.test(f.name||'');
+ if(pdf){$('pv').style.display='none';$('pdfv').src=URL.createObjectURL(f);$('pdfv').style.display='block';$('read').disabled=true;msg('PDF cargado. Míralo arriba y escribe las notas abajo. La lectura automática solo funciona con imágenes.');return}
+ if(!/^image\//.test(f.type)){msg('Ese tipo de archivo no es compatible. Usa una imagen o un PDF.');return}
+ $('pdfv').style.display='none';const fr=new FileReader();fr.onload=()=>{$('pv').src=fr.result;$('pv').style.display='block'};fr.readAsDataURL(f);$('read').disabled=false;msg('Foto lista. Pulsa “Leer partitura”.')}
+function pick(e){const f=e.target.files[0];if(f)setFile(f);e.target.value=''}
+$('cam').onchange=pick;$('gal').onchange=pick;$('fil').onchange=pick;
 document.addEventListener('paste',e=>{const it=[...((e.clipboardData&&e.clipboardData.items)||[])].find(i=>i.type.startsWith('image/'));if(it)setFile(it.getAsFile())});
-['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'){const f=[...e.dataTransfer.files].find(x=>x.type.startsWith('image/'));f&&setFile(f)}}));
+['dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();if(ev==='drop'){const f=[...e.dataTransfer.files].find(x=>x.type.startsWith('image/')||x.type==='application/pdf');f&&setFile(f)}}));
 async function shrink(f){try{const b=await createImageBitmap(f);const s=Math.min(1,1800/Math.max(b.width,b.height));const c=document.createElement('canvas');c.width=b.width*s;c.height=b.height*s;
  c.getContext('2d').drawImage(b,0,0,c.width,c.height);return await new Promise(r=>c.toBlob(r,'image/jpeg',.88))}catch(e){return f}}
 $('read').onclick=async()=>{
