@@ -35,11 +35,16 @@ function parseXml(text) {
   const names = {}; doc.querySelectorAll('part-list score-part').forEach(sp => { names[sp.getAttribute('id')] = (sp.querySelector('part-name') || {}).textContent || sp.getAttribute('id'); });
   const parts = [];
   doc.querySelectorAll('score-partwise > part').forEach(part => {
-    const id = part.getAttribute('id'), notes = [], MAXN = 800; let div = 1, chords = 0, odd = 0, dbl = 0, lost = 0;
+    const id = part.getAttribute('id'), notes = [], MAXN = 800; let div = 1, chords = 0, odd = 0, dbl = 0, lost = 0, mbeats = 4, multi = 0, multiRests = 0;
     part.querySelectorAll('measure').forEach((me, mi) => {
-      let firstInMeasure = mi > 0; const startLen = notes.length;
+      let firstInMeasure = mi > 0; multi = 0;
       [...me.children].forEach(el => {
-        if (el.tagName === 'attributes') { const d = el.querySelector('divisions'); if (d) div = +d.textContent || 1; return; }
+        if (el.tagName === 'attributes') {
+          const d = el.querySelector('divisions'); if (d) div = +d.textContent || 1;
+          const tb = el.querySelector('time beats'), tt = el.querySelector('time beat-type'); if (tb && tt) { const b = parseFloat(tb.textContent), t = parseFloat(tt.textContent); if (b > 0 && t > 0) mbeats = b * 4 / t; }
+          const mr = el.querySelector('multiple-rest'); if (mr) multi = parseInt(mr.textContent) || 0;
+          return;
+        }
         if (el.tagName !== 'note') return;
         const push = n => { if (firstInMeasure) { n.bar = 1; firstInMeasure = false; } notes.push(n); };
         const ty = (el.querySelector('type') || {}).textContent, dotted = !!el.querySelector('dot');
@@ -48,7 +53,14 @@ function parseXml(text) {
         if (el.querySelector('chord')) { chords++; return; }
         if (el.querySelector('grace')) return;
         if (isRest) {
-          const meas = el.querySelector('rest').getAttribute('measure') === 'yes' || !ty || beats > 4;
+          const wholeMeasure = el.querySelector('rest').getAttribute('measure') === 'yes';
+          if (wholeMeasure) {
+            // Compás de silencio (puede ser un silencio de varios compases): se escribe un silencio por compás.
+            const nM = Math.max(1, multi || 1); if (nM > 1) multiRests++;
+            for (let k = 0; k < nM; k++) { let first = true; splitBeats(mbeats).forEach(x => { const r = { r: 1, d: x[0], ...(x[1] ? { dot: 1 } : {}) }; if (k > 0 && first) r.bar = 1; first = false; push(r); }); }
+            return;
+          }
+          const meas = !ty || beats > 4;
           if (!meas) { push({ r: 1, d: TYPE2D[ty] || beatsToD(beats), ...(dotted ? { dot: 1 } : {}) }); return; }
           splitBeats(beats).forEach(x => push({ r: 1, d: x[0], ...(x[1] ? { dot: 1 } : {}) })); return;
         }
@@ -65,6 +77,7 @@ function parseXml(text) {
       });
     });
     const w = [];
+    if (multiRests) w.push(`${multiRests} silencio(s) de varios compases se escribieron como un silencio por compás.`);
     if (chords) w.push(`${chords} nota(s) de acordes se omitieron (se conserva la primera de cada acorde).`);
     if (odd) w.push(`${odd} figura(s) raras (tresillos u otras) se aproximaron.`);
     if (dbl) w.push(`${dbl} doble(s) alteración(es) se convirtieron a la nota equivalente.`);
