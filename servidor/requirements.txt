@@ -1,0 +1,5 @@
+homr==0.7.1
+onnxruntime
+fastapi
+uvicorn
+python-multipart

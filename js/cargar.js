@@ -73,9 +73,7 @@ VIEWS.cargar = m => {
   <div id="work"></div>
   <div class="card"><h2>¿Ya tienes un archivo MusicXML?</h2>
    <p class="sub">Si conviertes tu foto o PDF con un programa de reconocimiento (por ejemplo Audiveris o MuseScore), puedes importar aquí el resultado (.musicxml, .xml o .mxl) y la app lo convierte en notas editables, con posiciones y sonido.</p><div id="mxw"></div></div>
-  <div class="card warn"><b>Lectura automática (OMR): no disponible.</b>
-   <p>Esta app no tiene un motor de reconocimiento óptico de partituras. Un motor real necesita un servidor o un servicio de pago con clave privada, y no puede funcionar en una página estática. Por eso <b>no se detectan notas ni se simula el reconocimiento</b>: la imagen que cargas no es “leída”.</p>
-   <p>Lo que sí puedes hacer: ver tu partitura al lado del <b>Editor</b>, escribir las notas y escucharlas con su posición de vara.</p></div>`;
+  <div class="card" id="omr"></div>`;
   const say = (t, cls) => { $('#st').innerHTML = t ? `<div class="msg ${cls || 'i'}">${t}</div>` : ''; };
   const work = $('#work');
 
@@ -142,6 +140,66 @@ VIEWS.cargar = m => {
     draw();
   }
   $$('input[type=file]', m).forEach(inp => inp.onchange = () => { const fs = [...inp.files]; inp.value = ''; if (fs.length) addFiles(fs); });
-  mxlWidget($('#mxw'), (notes, mode, name) => { App.seq = mode === 'replace' ? notes.map(n => ({ ...n })) : App.seq.concat(notes.map(n => ({ ...n }))); if (mode === 'replace' && name) App.title = name; App.sel = -1; saveDraft(); go('editor'); });
+  const W = mxlWidget($('#mxw'), (notes, mode, name) => { App.seq = mode === 'replace' ? notes.map(n => ({ ...n })) : App.seq.concat(notes.map(n => ({ ...n }))); if (mode === 'replace' && name) App.title = name; App.sel = -1; saveDraft(); go('editor'); });
+  omrCard($('#omr'), () => App.pages, W, say);
   draw();
 };
+
+/* ---- Lectura automática (OMR) mediante un servidor propio ---- */
+function omrCard(root, getPages, W, say) {
+  let url = Store.get('lpt_omr', ''), cancel = false, running = false;
+  const clean = u => u.trim().replace(/\/+$/, '');
+  function draw() {
+    root.innerHTML = url ? `<h2>🔍 Lectura automática</h2>
+      <p class="sub">Servidor: <b>${esc(url)}</b></p>
+      <p class="sub">Las páginas se envían a ese servidor para reconocer las notas y se borran allí al terminar. El reconocimiento puede equivocarse: siempre revisa el resultado.</p>
+      <div class="row"><button class="b go" id="oread">🔍 Leer las páginas cargadas automáticamente</button><button class="b sec sm" id="otest">Probar conexión</button><button class="b sec sm" id="ochg">Cambiar servidor</button></div>
+      <div id="oprog" role="status" aria-live="polite"></div>` :
+    `<h2>🔍 Lectura automática: sin servidor</h2>
+      <p>Leer partituras automáticamente (OMR) necesita un servidor con un motor de reconocimiento; no puede hacerse solo en esta página. <b>Mientras no conectes uno, la app no lee ni inventa notas</b>: puedes escribirlas en el Editor o importar un MusicXML.</p>
+      <label class="f">Dirección de tu servidor de lectura (opcional)<input type="text" id="ourl" placeholder="https://tu-servidor.hf.space" inputmode="url" autocapitalize="off" spellcheck="false"></label>
+      <div class="row" style="margin-top:8px"><button class="b sec" id="osave">Guardar y probar</button></div><div id="oprog" role="status"></div>`;
+    const pg = t => { $('#oprog', root).innerHTML = t ? `<div class="msg i" style="margin-top:8px">${t}</div>` : ''; };
+    if (!url) {
+      $('#osave', root).onclick = async () => {
+        const u = clean($('#ourl', root).value); if (!/^https?:\/\//i.test(u)) return pg('⚠️ Escribe una dirección que empiece con https://');
+        pg('Probando conexión…'); try { await ping(u); url = u; Store.set('lpt_omr', u); draw(); $('#oprog', root).innerHTML = '<div class="msg o" style="margin-top:8px">✔ Conectado.</div>'; } catch (e) { pg('⚠️ ' + esc(e.message)); }
+      }; return;
+    }
+    $('#ochg', root).onclick = () => { url = ''; Store.set('lpt_omr', ''); draw(); };
+    $('#otest', root).onclick = async () => { pg('Probando conexión…'); try { const r = await ping(url); $('#oprog', root).innerHTML = `<div class="msg o" style="margin-top:8px">✔ El servidor responde (${r.en_cola || 0} en cola).</div>`; } catch (e) { pg('⚠️ ' + esc(e.message)); } };
+    $('#oread', root).onclick = () => (running ? (cancel = true) : read(pg));
+  }
+  async function ping(u) {
+    let last;
+    for (let i = 0; i < 6; i++) {   // un servidor gratuito "dormido" tarda en despertar
+      try { const r = await fetch(u + '/', { cache: 'no-store' }); if (r.ok) { const j = await r.json(); if (j && j.ok) return j; } last = new Error('La dirección responde, pero no es un servidor de lectura.'); }
+      catch (e) { last = new Error('No se pudo conectar. Si el servidor estaba dormido, espera un minuto y vuelve a probar.'); }
+      await new Promise(r => setTimeout(r, 5000));
+    }
+    throw last;
+  }
+  const toBlob = c => new Promise(r => { const k = Math.min(1, 2200 / Math.max(c.width, c.height)); const t = document.createElement('canvas'); t.width = Math.round(c.width * k); t.height = Math.round(c.height * k); t.getContext('2d').drawImage(c, 0, 0, t.width, t.height); t.toBlob(r, 'image/jpeg', 0.9); });
+  async function read(pg) {
+    const pages = getPages(); if (!pages.length) return pg('⚠️ Primero toma una foto o sube una imagen o PDF.');
+    running = true; cancel = false; $('#oread', root).textContent = '✖ Cancelar lectura';
+    try {
+      pg('Conectando con el servidor…'); await ping(url);
+      const fd = new FormData(); for (let i = 0; i < pages.length; i++) fd.append('files', await toBlob(pages[i].canvas), `p${i + 1}.jpg`);
+      pg('Enviando páginas…');
+      const r = await fetch(url + '/api/jobs', { method: 'POST', body: fd }); const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.detail || 'El servidor rechazó el envío.');
+      for (;;) {
+        if (cancel) { pg('Lectura cancelada.'); break; }
+        await new Promise(r => setTimeout(r, 3000));
+        const sr = await fetch(url + '/api/jobs/' + j.id, { cache: 'no-store' }); const s = await sr.json().catch(() => ({}));
+        if (!sr.ok) throw new Error(s.detail || 'Se perdió el trabajo en el servidor.');
+        if (s.status === 'error') throw new Error(s.message || 'No se pudo leer la partitura.');
+        if (s.status === 'done') { pg(''); const parts = parseXml(s.musicxml); (s.warnings || []).forEach(w => parts.forEach(p => p.warns.unshift(w))); W.present(parts, 'partitura leída', true); break; }
+        pg(s.status === 'queued' ? 'En cola… esperando turno.' : `Leyendo página ${s.page} de ${s.total}… (tarda cerca de 30–60 s por página)`);
+      }
+    } catch (e) { pg('⚠️ ' + esc(e.message)); }
+    running = false; const b = $('#oread', root); if (b) b.textContent = '🔍 Leer las páginas cargadas automáticamente';
+  }
+  draw();
+}

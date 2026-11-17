@@ -26,7 +26,7 @@ function saveDraft() { Store.set('lpt_draft', { seq: App.seq, title: App.title, 
   const d = Store.get('lpt_draft', null);
   if (d && Array.isArray(d.seq)) { App.seq = d.seq.filter(validNote); App.title = d.title || ''; if (d.bpm) Player.bpm = d.bpm; }
 })();
-function validNote(n) { return n && n.n >= 0 && n.n <= 6 && n.o >= 0 && n.o <= 7 && 'n#b'.includes(n.a) && DURS[n.d]; }
+function validNote(n) { return n && DURS[n.d] && (n.r || (n.n >= 0 && n.n <= 6 && n.o >= 0 && n.o <= 7 && 'n#b'.includes(n.a))); }
 
 /* ---------- navegación ---------- */
 function go(v, act) { App.pendingAction = act || null; if (location.hash === '#/' + v) render(); else location.hash = '#/' + v; }
@@ -52,16 +52,19 @@ function picker(root, st, opt, onChange) {
   root.innerHTML = `<div class="row"><div><div class="sub"><b>Nota</b></div><div class="seg" data-k="n">${NAMES.map((n, i) => `<button type="button" data-v="${i}" class="${st.n === i ? 'on' : ''}">${n}</button>`).join('')}</div></div></div>
   <div class="row" style="margin-top:8px"><div><div class="sub"><b>Alteración</b></div><div class="seg" data-k="a">${[['n', '♮ natural'], ['#', '♯ sostenido'], ['b', '♭ bemol']].map(a => `<button type="button" data-v="${a[0]}" class="${st.a === a[0] ? 'on' : ''}">${a[1]}</button>`).join('')}</div></div>
   <label class="f">Octava<select data-k="o">${[1, 2, 3, 4, 5].map(o => `<option value="${o}" ${st.o === o ? 'selected' : ''}>${o}</option>`).join('')}</select></label></div>
-  ${opt.dur ? `<div style="margin-top:8px"><div class="sub"><b>Duración</b></div><div class="seg" data-k="d">${Object.keys(DURS).map(k => `<button type="button" data-v="${k}" class="${st.d === k ? 'on' : ''}">${DURS[k].name}<small style="font-weight:400"> · ${DURS[k].beats} t</small></button>`).join('')}</div></div>` : ''}`;
+  ${opt.dur ? `<div style="margin-top:8px"><div class="sub"><b>Duración</b></div><div class="seg" data-k="d">${Object.keys(DURS).map(k => `<button type="button" data-v="${k}" class="${st.d === k ? 'on' : ''}">${DURS[k].name}<small style="font-weight:400"> · ${DURS[k].beats} t</small></button>`).join('')}</div>
+   <div class="row" style="margin-top:8px"><label class="row" style="gap:6px"><input type="checkbox" data-x="dot" ${st.dot ? 'checked' : ''}> Con puntillo (+½)</label><label class="row" style="gap:6px"><input type="checkbox" data-x="tie" ${st.tie ? 'checked' : ''}> Ligada con la siguiente</label><label class="row" style="gap:6px"><input type="checkbox" data-x="r" ${st.r ? 'checked' : ''}> Es un silencio</label></div></div>` : ''}`;
   $$('.seg', root).forEach(sg => $$('button', sg).forEach(b => b.onclick = () => {
     const k = sg.dataset.k; st[k] = k === 'n' ? +b.dataset.v : b.dataset.v;
     picker(root, st, opt, onChange); onChange(k);
   }));
   const so = $('select', root); so.onchange = () => { st.o = +so.value; onChange('o'); };
+  $$('input[data-x]', root).forEach(c => c.onchange = () => { st[c.dataset.x] = c.checked; onChange(c.dataset.x); });
 }
 
 /* ---------- panel de información de una nota ---------- */
 function noteInfoHTML(n) {
+  if (n.r) return `<div class="big">Silencio de ${DURS[n.d].name.toLowerCase()}${n.dot ? ' con puntillo' : ''}</div><div class="sub">Dura ${beatsOf(n)} tiempo(s). No se toca ninguna nota: la vara descansa.</div>`;
   const m = midiOf(n), pi = posInfo(m), f = freqOf(m);
   let h = `<div class="big">${esc(labelO(n))}</div><div class="sub">Nombre: <b>${esc(label(n))}</b> · Octava: <b>${n.o}</b> · Frecuencia aproximada: <b>${fmtHz(f)}</b></div>`;
   if (!pi.inRange) return h + `<div class="msg e" style="margin-top:8px">⚠️ ${rangeMsg(m)}</div>`;

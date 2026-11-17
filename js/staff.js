@@ -27,6 +27,7 @@ function noteSVG(n, x, yb, o) {
   if (d <= 16) for (let k = 16; k >= (d % 2 === 0 ? d : d + 1); k -= 2) s += `<line x1="${x - 11}" x2="${x + 11}" y1="${ys(k, yb)}" y2="${ys(k, yb)}" stroke="${col}" stroke-width="1.4"/>`;
   if (d >= 28) for (let k = 28; k <= (d % 2 === 0 ? d : d - 1); k += 2) s += `<line x1="${x - 11}" x2="${x + 11}" y1="${ys(k, yb)}" y2="${ys(k, yb)}" stroke="${col}" stroke-width="1.4"/>`;
   if (n.a !== 'n') s += accSym(x - 17, y, n.a, col);
+  if (o.dot) s += `<circle cx="${x + 12}" cy="${(d >= 18 && d <= 26 && (d - 18) % 2 === 0) ? y - 5 : y}" r="2" fill="${col}"/>`;
   const open = (o.dur === 'w' || o.dur === 'h');
   s += `<ellipse class="hd" cx="${x}" cy="${y}" rx="6.6" ry="4.7" transform="rotate(-20 ${x} ${y})" fill="${open ? '#fff' : col}" stroke="${col}" stroke-width="${open ? 2 : 1}"/>`;
   if (o.dur !== 'w') {
@@ -47,9 +48,9 @@ function layout(notes, W) {
   const START = 66, MAXX = W - 18, sys = [];
   let cur = [], x = START;
   notes.forEach((n, i) => {
-    const w = NW[n.d] + (n.a !== 'n' ? 14 : 0);
+    const acc = (!n.r && n.a !== 'n') ? 14 : 0, w = NW[n.d] + acc + (n.bar ? 8 : 0);
     if (x + w > MAXX && cur.length) { sys.push(cur); cur = []; x = START; }
-    cur.push({ i, x: x + (n.a !== 'n' ? 14 : 0) + NW[n.d] / 2 - 6 });
+    cur.push({ i, x: x + acc + (n.bar ? 8 : 0) + NW[n.d] / 2 - 6, bar: !!n.bar });
     x += w;
   });
   sys.push(cur);
@@ -73,13 +74,21 @@ function scoreSVG(notes, opts) {
     s += bclef(14, yb);
     if (!notes.length && opts.empty !== false) s += `<text x="${W / 2}" y="${yb - 56}" text-anchor="middle" font-size="15" fill="#6a5f7a">Aún no hay notas. Agrégalas con los controles.</text>`;
     sys[k].forEach(p => {
-      const n = notes[p.i], m = midiOf(n);
+      const n = notes[p.i], m = n.r ? 0 : midiOf(n);
       const on = opts.cur === p.i, sel = opts.sel === p.i;
       s += `<g class="nt${on ? ' on' : ''}${sel ? ' sel' : ''}" data-i="${p.i}">`;
       if (opts.hit !== false) s += `<rect class="col" x="${p.x - NW[n.d] / 2 - 4}" y="${yb - 100}" width="${NW[n.d] + 8}" height="${SYS_H - 8}" rx="8"/>`;
-      s += noteSVG(n, p.x, yb, { dur: n.d });
-      if (opts.names !== false) s += `<text x="${p.x}" y="${yb + 78}" text-anchor="middle" font-size="14" font-weight="700" fill="#241a33">${esc(label(n))}</text>`;
-      if (opts.pos) {
+      if (p.bar) s += `<line x1="${p.x - NW[n.d] / 2 - 4}" x2="${p.x - NW[n.d] / 2 - 4}" y1="${yb}" y2="${yb - 40}" stroke="#241a33" stroke-width="1.3"/>`;
+      if (n.r) {
+        s += restShapes(n.d, p.x, yb);
+        if (n.dot) s += `<circle cx="${p.x + 12}" cy="${yb - 25}" r="2" fill="#241a33"/>`;
+      } else s += noteSVG(n, p.x, yb, { dur: n.d, dot: n.dot });
+      if (n.tie && !n.r) {
+        const nx = sys[k].find(q => q.i === p.i + 1), y0 = ys(dIdx(n), yb) + (dIdx(n) >= 22 ? -9 : 9), up = dIdx(n) >= 22 ? -1 : 1, x2 = nx ? nx.x : p.x + 26;
+        s += `<path d="M${p.x + 4} ${y0}Q${(p.x + x2) / 2} ${y0 + up * 12} ${x2 - 4} ${y0}" fill="none" stroke="#241a33" stroke-width="1.6"/>`;
+      }
+      if (opts.names !== false) s += `<text x="${p.x}" y="${yb + 78}" text-anchor="middle" font-size="${n.r ? 11 : 14}" font-weight="${n.r ? 400 : 700}" fill="#241a33">${n.r ? 'silencio' : esc(label(n))}</text>`;
+      if (opts.pos && !n.r) {
         const pi = posInfo(m);
         s += `<text x="${p.x}" y="${yb + 98}" text-anchor="middle" font-size="13" font-weight="700" fill="#5b2a86">${pi.inRange ? 'P' + pi.main : '—'}</text>`;
       }
@@ -91,16 +100,19 @@ function scoreSVG(notes, opts) {
 }
 function sysCount(notes, W) { return layout(notes, W).length; }
 
-/* Silencios (símbolos simples) */
+/* Silencios: formas dibujadas con la 3.ª línea (central) en la posición (x, yb-20). */
+function restShapes(kind, x, yb, col) {
+  col = col || '#241a33'; const mid = yb - 20;
+  if (kind === 'w') return `<rect x="${x - 9}" y="${yb - 30}" width="18" height="6" fill="${col}"/>`;
+  if (kind === 'h') return `<rect x="${x - 9}" y="${mid - 6}" width="18" height="6" fill="${col}"/>`;
+  const t = `translate(${x - 38} ${yb - 60})`;
+  if (kind === 'q') return `<path transform="${t}" d="M36 22l9 11-6 7 8 9c-6-2-9 1-7 6" fill="none" stroke="${col}" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  if (kind === 'e') return `<g transform="${t}"><circle cx="38" cy="30" r="3.4" fill="${col}"/><path d="M40 30c4 0 6-3 8-6M48 24L38 52" fill="none" stroke="${col}" stroke-width="2.6" stroke-linecap="round"/></g>`;
+  return `<g transform="${t}"><circle cx="38" cy="30" r="3.2" fill="${col}"/><circle cx="35" cy="40" r="3.2" fill="${col}"/><path d="M40 30c4 0 6-3 8-6M37 40c4 0 6-3 9-6M48 24L36 54" fill="none" stroke="${col}" stroke-width="2.6" stroke-linecap="round"/></g>`;
+}
 function restSVG(kind) {
-  const L = [0, 1, 2, 3, 4].map(i => `<line x1="2" x2="78" y1="${20 + i * 10}" y2="${20 + i * 10}" stroke="#241a33" stroke-width="1"/>`).join('');
-  let r = '';
-  if (kind === 'w') r = '<rect x="30" y="30" width="20" height="6" fill="#241a33"/>';       // cuelga de la 4.ª línea
-  if (kind === 'h') r = '<rect x="30" y="34" width="20" height="6" fill="#241a33"/>';       // sobre la 3.ª línea
-  if (kind === 'q') r = '<path d="M36 22l9 11-6 7 8 9c-6-2-9 1-7 6" fill="none" stroke="#241a33" stroke-width="3.2" stroke-linejoin="round" stroke-linecap="round"/>';
-  if (kind === 'e') r = '<circle cx="38" cy="30" r="3.4" fill="#241a33"/><path d="M40 30c4 0 6-3 8-6M48 24L38 52" fill="none" stroke="#241a33" stroke-width="2.6" stroke-linecap="round"/>';
-  if (kind === 's') r = '<circle cx="38" cy="30" r="3.2" fill="#241a33"/><circle cx="35" cy="40" r="3.2" fill="#241a33"/><path d="M40 30c4 0 6-3 8-6M37 40c4 0 6-3 9-6M48 24L36 54" fill="none" stroke="#241a33" stroke-width="2.6" stroke-linecap="round"/>';
-  return `<svg viewBox="0 0 80 70" style="width:100%;max-width:120px;height:auto" role="img" aria-label="silencio">${L}${r}</svg>`;
+  const yb = 60, L = [0, 1, 2, 3, 4].map(i => `<line x1="2" x2="78" y1="${yb - i * 10}" y2="${yb - i * 10}" stroke="#241a33" stroke-width="1"/>`).join('');
+  return `<svg viewBox="0 0 80 70" style="width:100%;max-width:120px;height:auto" role="img" aria-label="silencio">${L}${restShapes(kind, 40, yb)}</svg>`;
 }
 
 /* Diagrama del trombón (dibujo propio, estilo plano). La vara completa se desplaza: la barra morada marca

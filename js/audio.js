@@ -47,7 +47,7 @@ const Player = {
   load(notes) {
     this.stop(true);
     this.notes = notes; this.starts = []; let b = 0;
-    notes.forEach(n => { this.starts.push(b); b += DURS[n.d].beats; });
+    notes.forEach(n => { this.starts.push(b); b += beatsOf(n); });
     this.total = b;
   },
   _set(s) { this.state = s; if (this.onState) this.onState(s); },
@@ -71,8 +71,12 @@ const Player = {
     const now = Eng.now(), spb = 60 / this.bpm, hz = now + 0.2;
     while (this.nextNote < this.notes.length && this.t0 + this.starts[this.nextNote] * spb < hz) {
       const i = this.nextNote, n = this.notes[i], t = Math.max(this.t0 + this.starts[i] * spb, now);
-      const dur = DURS[n.d].beats * spb;
-      Eng.tone(midiOf(n), t, Math.max(0.08, dur * 0.96));
+      let beats = beatsOf(n);
+      if (!n.r) {
+        const prev = this.notes[i - 1];
+        const tiedFromPrev = prev && prev.tie && !prev.r && midiOf(prev) === midiOf(n);
+        if (!tiedFromPrev) { let j = i; while (this.notes[j] && this.notes[j].tie && this.notes[j + 1] && !this.notes[j + 1].r && midiOf(this.notes[j + 1]) === midiOf(n)) { j++; beats += beatsOf(this.notes[j]); } Eng.tone(midiOf(n), t, Math.max(0.08, beats * spb * 0.96)); }
+      }
       this.timeouts.push(setTimeout(() => { if (this.state === 'play') { this.cur = i; if (this.onMark) this.onMark(i); } }, Math.max(0, (t - now) * 1000)));
       this.nextNote++;
     }

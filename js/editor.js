@@ -29,15 +29,15 @@ VIEWS.editor = m => {
    <div id="xmsg"></div></div>`;
 
   const seq = () => App.seq;
-  const note = () => ({ n: cur.n, o: cur.o, a: cur.a, d: cur.d });
+  const note = () => { const x = { n: cur.n, o: cur.o, a: cur.a, d: cur.d }; if (cur.r) { x.r = 1; } if (cur.dot) x.dot = 1; if (cur.tie && !cur.r) x.tie = 1; return x; };
   const msg = (t, c) => { $('#emsg').innerHTML = t ? `<div class="msg ${c || 'i'}">${t}</div>` : ''; };
   function drawStaff(curIdx) {
     $('#stf').innerHTML = scoreSVG(seq(), { W: $('#stf').clientWidth < 560 ? 420 : 760, names: showNames, pos: showPos, cur: curIdx, sel: App.sel, id: 'stsvg' });
-    const tot = seq().reduce((s, n) => s + DURS[n.d].beats, 0);
+    const tot = seq().reduce((s, n) => s + beatsOf(n), 0);
     $('#cnt').textContent = seq().length ? `${seq().length} nota(s) · ${tot} tiempos` : '';
   }
   function drawSeq() {
-    $('#seq').innerHTML = seq().length ? seq().map((n, i) => { const pi = posInfo(midiOf(n)); return `<span class="chip ${i === App.sel ? 'on' : ''}" data-i="${i}" style="cursor:pointer">${i + 1}. ${esc(labelO(n))} · ${DURS[n.d].name.toLowerCase()} · ${pi.inRange ? 'P' + pi.main : 'fuera de rango'}</span>`; }).join('') : '<span class="sub">La secuencia está vacía.</span>';
+    $('#seq').innerHTML = seq().length ? seq().map((n, i) => { const pi = n.r ? null : posInfo(midiOf(n)); return `<span class="chip ${i === App.sel ? 'on' : ''}" data-i="${i}" style="cursor:pointer">${i + 1}. ${n.r ? 'Silencio' : esc(labelO(n))} · ${DURS[n.d].name.toLowerCase()}${n.dot ? ' con puntillo' : ''}${n.tie ? ' ⌒' : ''}${pi ? ' · ' + (pi.inRange ? 'P' + pi.main : 'fuera de rango') : ''}</span>`; }).join('') : '<span class="sub">La secuencia está vacía.</span>';
     $$('#seq .chip').forEach(c => c.onclick = () => select(+c.dataset.i));
   }
   function drawInfo() {
@@ -46,20 +46,20 @@ VIEWS.editor = m => {
   function drawPicker() { picker($('#pk'), cur, { dur: true }, () => { drawInfo(); }); }
   function refresh() { saveDraft(); Player.load(seq()); drawStaff(-1); drawSeq(); drawInfo(); bindStaff(); }
   function select(i) {
-    App.sel = i; if (i >= 0) Object.assign(cur, seq()[i]);
+    App.sel = i; if (i >= 0) { cur.r = cur.dot = cur.tie = false; Object.assign(cur, seq()[i]); }
     drawPicker(); drawStaff(-1); drawSeq(); drawInfo(); bindStaff();
   }
   function bindStaff() {
     const sv = $('#stsvg'); if (!sv) return;
     sv.onclick = e => {
       const g = e.target.closest('.nt');
-      if (g) { select(+g.dataset.i); try { playOne(seq()[+g.dataset.i]); } catch (x) { } return; }
+      if (g) { select(+g.dataset.i); if (!seq()[+g.dataset.i].r) try { playOne(seq()[+g.dataset.i]); } catch (x) { } return; }
       const r = sv.getBoundingClientRect(), vb = sv.viewBox.baseVal, k = vb.width / r.width, yv = (e.clientY - r.top) * k;
       const s = Math.max(0, Math.min(sysCount(seq()) - 1, Math.floor(yv / SYS_H))), yb = s * SYS_H + BOT;
       const d = Math.max(7, Math.min(41, 18 + Math.round((yb - yv) / 5)));
       cur.o = Math.floor(d / 7); cur.n = d % 7; App.sel = -1;
       drawPicker(); drawStaff(-1); drawInfo(); bindStaff(); drawSeq();
-      try { playOne(note()); } catch (x) { }
+      if (!cur.r) try { playOne(note()); } catch (x) { }
     };
   }
   $('#ttl').oninput = e => { App.title = e.target.value; saveDraft(); };
@@ -68,10 +68,10 @@ VIEWS.editor = m => {
   if ($('#rp')) $('#rp').onchange = e => { $('#rim').src = App.pages[+e.target.value].url; };
   $('#add').onclick = () => {
     const n = note(), at = App.sel >= 0 ? App.sel + 1 : seq().length;
-    seq().splice(at, 0, n); App.sel = at; const pi = posInfo(midiOf(n));
+    seq().splice(at, 0, n); App.sel = at; const pi = n.r ? { inRange: true, main: 0 } : posInfo(midiOf(n));
     refresh(); drawPicker(); drawSeq();
-    msg(pi.inRange ? `Se añadió ${esc(labelO(n))} (posición ${pi.main}).` : `Se añadió ${esc(labelO(n))}, pero está fuera del rango práctico (Mi2–Si♭4): no tiene posición asignada.`, pi.inRange ? 'o' : 'e');
-    try { playOne(n); } catch (x) { }
+    msg(n.r ? 'Se añadió un silencio.' : pi.inRange ? `Se añadió ${esc(labelO(n))} (posición ${pi.main}).` : `Se añadió ${esc(labelO(n))}, pero está fuera del rango práctico (Mi2–Si♭4): no tiene posición asignada.`, pi.inRange ? 'o' : 'e');
+    if (!n.r) try { playOne(n); } catch (x) { }
   };
   $('#chg').onclick = () => { if (App.sel < 0) return msg('Primero toca una nota en el pentagrama o en la secuencia.', 'e'); seq()[App.sel] = note(); refresh(); msg('Nota cambiada.', 'o'); };
   $('#del').onclick = () => { if (App.sel < 0) return msg('Primero toca la nota que quieres eliminar.', 'e'); seq().splice(App.sel, 1); App.sel = Math.min(App.sel, seq().length - 1); refresh(); drawPicker(); msg('Nota eliminada.', 'o'); };
@@ -85,7 +85,7 @@ VIEWS.editor = m => {
   Player.onState = ps;
   Player.onMark = i => {
     $$('#stf .nt').forEach(g => g.classList.toggle('on', +g.dataset.i === i));
-    if (i >= 0) { const n = seq()[i], pi = posInfo(midiOf(n)); $('#now').textContent = `♪ Suena: ${labelO(n)} · ${DURS[n.d].name.toLowerCase()} · ${pi.inRange ? 'posición ' + pi.main : 'fuera de rango'}`; const g = $(`#stf .nt[data-i="${i}"]`); if (g) { const bx = $('#stf'), r = g.getBoundingClientRect(), br = bx.getBoundingClientRect(); if (r.right > br.right || r.left < br.left) bx.scrollLeft += r.left - br.left - 40; } }
+    if (i >= 0) { const n = seq()[i], pi = n.r ? null : posInfo(midiOf(n)); $('#now').textContent = n.r ? `♪ Silencio de ${DURS[n.d].name.toLowerCase()}` : `♪ Suena: ${labelO(n)} · ${DURS[n.d].name.toLowerCase()} · ${pi.inRange ? 'posición ' + pi.main : 'fuera de rango'}`; const g = $(`#stf .nt[data-i="${i}"]`); if (g) { const bx = $('#stf'), r = g.getBoundingClientRect(), br = bx.getBoundingClientRect(); if (r.bottom > br.bottom - 20 || r.top < br.top) bx.scrollTop += r.top - br.top - 60; if (r.right > br.right || r.left < br.left) bx.scrollLeft += r.left - br.left - 40; } }
     else $('#now').textContent = Player.state === 'pause' ? 'En pausa.' : 'Listo para reproducir.';
   };
   Player.onEnd = () => { $('#now').textContent = 'Terminó la secuencia.'; };

@@ -23,6 +23,7 @@ const CMS = [0, 8, 16.5, 25.5, 35, 45, 56];
 const LOWPARTIAL = { 66: true, 67: true };
 const PCN = [[0, 'n'], [0, '#'], [1, 'n'], [2, 'b'], [2, 'n'], [3, 'n'], [3, '#'], [4, 'n'], [5, 'b'], [5, 'n'], [6, 'b'], [6, 'n']];
 
+function beatsOf(n) { return DURS[n.d].beats * (n.dot ? 1.5 : 1); }
 function midiOf(n) { return 12 * (n.o + 1) + BASE[n.n] + ACCV[n.a]; }
 function freqOf(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 function noteFromMidi(m) { const p = PCN[((m % 12) + 12) % 12]; return { n: p[0], a: p[1], o: Math.floor(m / 12) - 1 }; }

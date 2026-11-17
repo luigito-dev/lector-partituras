@@ -22,6 +22,12 @@ async function readZip(buf) {
 }
 const TYPE2D = { whole: 'w', half: 'h', quarter: 'q', eighth: 'e', '16th': 's' };
 function beatsToD(b) { const c = [['w', 4], ['h', 2], ['q', 1], ['e', .5], ['s', .25]]; let best = c[0]; c.forEach(x => { if (Math.abs(x[1] - b) < Math.abs(best[1] - b)) best = x; }); return best[0]; }
+/* Divide una duración en tiempos en figuras (con puntillo cuando hace falta). */
+function splitBeats(b) {
+  const T = [[4, 'w', 0], [3, 'h', 1], [2, 'h', 0], [1.5, 'q', 1], [1, 'q', 0], [0.75, 'e', 1], [0.5, 'e', 0], [0.25, 's', 0]], out = [];
+  let g = 0; while (b >= 0.25 - 1e-6 && g++ < 500) { const t = T.find(x => x[0] <= b + 1e-6); out.push([t[1], t[2]]); b -= t[0]; }
+  return out.length ? out : [['q', 0]];
+}
 function parseXml(text) {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   if (doc.querySelector('parsererror') || !doc.querySelector('score-partwise,score-timewise')) throw new Error('El archivo no es un MusicXML válido.');
@@ -29,38 +35,43 @@ function parseXml(text) {
   const names = {}; doc.querySelectorAll('part-list score-part').forEach(sp => { names[sp.getAttribute('id')] = (sp.querySelector('part-name') || {}).textContent || sp.getAttribute('id'); });
   const parts = [];
   doc.querySelectorAll('score-partwise > part').forEach(part => {
-    const id = part.getAttribute('id'), notes = [], W = new Set(); let div = 1, rests = 0, chords = 0, dots = 0, ties = 0, odd = 0, dbl = 0;
-    part.querySelectorAll('measure').forEach(me => {
+    const id = part.getAttribute('id'), notes = [], MAXN = 800; let div = 1, chords = 0, odd = 0, dbl = 0, lost = 0;
+    part.querySelectorAll('measure').forEach((me, mi) => {
+      let firstInMeasure = mi > 0; const startLen = notes.length;
       [...me.children].forEach(el => {
         if (el.tagName === 'attributes') { const d = el.querySelector('divisions'); if (d) div = +d.textContent || 1; return; }
         if (el.tagName !== 'note') return;
-        if (el.querySelector('rest')) { rests++; return; }
+        const push = n => { if (firstInMeasure) { n.bar = 1; firstInMeasure = false; } notes.push(n); };
+        const ty = (el.querySelector('type') || {}).textContent, dotted = !!el.querySelector('dot');
+        const isRest = !!el.querySelector('rest');
+        const beats = ((+(el.querySelector('duration') || {}).textContent) || div) / div;
         if (el.querySelector('chord')) { chords++; return; }
         if (el.querySelector('grace')) return;
+        if (isRest) {
+          const meas = el.querySelector('rest').getAttribute('measure') === 'yes' || !ty || beats > 4;
+          if (!meas) { push({ r: 1, d: TYPE2D[ty] || beatsToD(beats), ...(dotted ? { dot: 1 } : {}) }); return; }
+          splitBeats(beats).forEach(x => push({ r: 1, d: x[0], ...(x[1] ? { dot: 1 } : {}) })); return;
+        }
         const pc = el.querySelector('pitch'); if (!pc) return;
         const step = pc.querySelector('step').textContent.trim(), oct = +pc.querySelector('octave').textContent, alt = +((pc.querySelector('alter') || {}).textContent || 0);
         const idx = 'CDEFGAB'.indexOf(step); let n;
         if (alt === 1 || alt === -1 || alt === 0) n = { n: idx, o: oct, a: alt === 1 ? '#' : alt === -1 ? 'b' : 'n' };
         else { dbl++; n = noteFromMidi(12 * (oct + 1) + BASE[idx] + alt); }
-        const ty = (el.querySelector('type') || {}).textContent;
-        if (el.querySelector('dot')) dots++;
-        if (el.querySelector('tie[type="stop"]')) ties++;
-        let d;
-        if (ty && TYPE2D[ty]) d = TYPE2D[ty]; else { odd++; d = beatsToD(((+(el.querySelector('duration') || {}).textContent) || div) / div); }
+        if (ty && TYPE2D[ty]) { n.d = TYPE2D[ty]; if (dotted) n.dot = 1; }
+        else { odd++; const x = splitBeats(beats)[0]; n.d = x[0]; if (x[1]) n.dot = 1; }
         if (el.querySelector('time-modification')) odd++;
-        n.d = d; if (n.o >= 0 && n.o <= 7) notes.push(n);
+        if (el.querySelector('tie[type="start"]')) n.tie = 1;
+        if (n.o >= 0 && n.o <= 7) push(n); else lost++;
       });
     });
     const w = [];
-    if (rests) w.push(`${rests} silencio(s) no se importan (la app aún no tiene silencios en el editor).`);
     if (chords) w.push(`${chords} nota(s) de acordes se omitieron (se conserva la primera de cada acorde).`);
-    if (dots) w.push(`${dots} nota(s) con puntillo se importaron sin el puntillo (duración aproximada).`);
-    if (ties) w.push(`${ties} ligadura(s): la nota ligada aparece repetida.`);
     if (odd) w.push(`${odd} figura(s) raras (tresillos u otras) se aproximaron.`);
     if (dbl) w.push(`${dbl} doble(s) alteración(es) se convirtieron a la nota equivalente.`);
-    const out = notes.filter(n => { const m = midiOf(n); return m < MIN_MIDI || m > MAX_MIDI; }).length;
+    if (lost) w.push(`${lost} nota(s) con octava fuera de rango se omitieron.`);
+    const out = notes.filter(n => !n.r).filter(n => { const m = midiOf(n); return m < MIN_MIDI || m > MAX_MIDI; }).length;
     if (out) w.push(`${out} nota(s) quedan fuera del rango práctico (Mi2–Si♭4): no tendrán posición.`);
-    if (notes.length > 200) { w.push('Se importaron solo las primeras 200 notas.'); notes.length = 200; }
+    if (notes.length > MAXN) { w.push(`Se importaron solo los primeros ${MAXN} elementos.`); notes.length = MAXN; }
     parts.push({ id, name: names[id] || id, notes, warns: w });
   });
   return parts.filter(p => p.notes.length || true);
@@ -84,26 +95,30 @@ async function readMusicFile(file) {
 function mxlWidget(root, onUse) {
   root.innerHTML = `<label class="b sec" id="mxl">🎼 Importar MusicXML<input type="file" accept=".musicxml,.xml,.mxl" hidden></label><div id="mxs" role="status" aria-live="polite"></div><div id="mxp"></div>`;
   const say = (t, c) => { $('#mxs', root).innerHTML = t ? `<div class="msg ${c || 'i'}">${t}</div>` : ''; };
+  function present(parts, fname, auto) {
+    $('#mxp', root).innerHTML = '';
+    const usable = parts.filter(p => p.notes.length);
+    if (!usable.length) return say('El archivo no tiene notas con altura (solo silencios o percusión).', 'e');
+    say(auto ? `✔ Lectura automática terminada. <b>Revisa el resultado:</b> el reconocimiento puede equivocarse.` : `✔ Archivo leído: ${usable.length} parte(s) con notas.`, 'o');
+    const show = k => {
+      const p = usable[k], real = p.notes.filter(n => !n.r).length;
+      $('#mxp', root).innerHTML = `${usable.length > 1 ? `<label class="f" style="margin:8px 0">Parte (instrumento)<select id="mpart">${usable.map((x, i) => `<option value="${i}" ${i === k ? 'selected' : ''}>${esc(x.name)} (${x.notes.length} elementos)</option>`).join('')}</select></label>` : `<p class="sub">Parte: <b>${esc(p.name)}</b> · ${real} notas y ${p.notes.length - real} silencios</p>`}
+      <div class="staffbox" style="max-height:340px">${scoreSVG(p.notes.slice(0, 40), { names: true, pos: true, hit: false, W: 420 })}</div>
+      ${p.notes.length > 40 ? `<p class="sub">Vista previa de los primeros 40 elementos.</p>` : ''}
+      ${p.warns.map(w => `<div class="msg e">⚠️ ${esc(w)}</div>`).join('')}
+      <p class="sub">Revisa que sea la parte de trombón (clave de fa). La app no cambia la octava ni transpone.</p>
+      <div class="row"><button class="b" id="muse">Reemplazar mi secuencia</button><button class="b sec" id="muapp">Agregar al final</button></div>`;
+      const sel = $('#mpart', root); if (sel) sel.onchange = () => show(+sel.value);
+      const nm = (fname || '').replace(/\.[^.]+$/, '');
+      $('#muse', root).onclick = () => onUse(p.notes, 'replace', nm);
+      $('#muapp', root).onclick = () => onUse(p.notes, 'append', nm);
+    };
+    show(Math.max(0, usable.findIndex(x => /tromb|tbn|bone/i.test(x.name))));
+  }
   $('input', root).onchange = async e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
     $('#mxp', root).innerHTML = ''; say('Leyendo archivo…');
-    try {
-      const parts = await readMusicFile(f); const usable = parts.filter(p => p.notes.length);
-      if (!usable.length) return say('El archivo no tiene notas con altura (solo silencios o percusión).', 'e');
-      say(`✔ Archivo leído: ${usable.length} parte(s) con notas.`, 'o');
-      const show = k => {
-        const p = usable[k];
-        $('#mxp', root).innerHTML = `${usable.length > 1 ? `<label class="f" style="margin:8px 0">Parte (instrumento)<select id="mpart">${usable.map((x, i) => `<option value="${i}" ${i === k ? 'selected' : ''}>${esc(x.name)} (${x.notes.length} notas)</option>`).join('')}</select></label>` : `<p class="sub">Parte: <b>${esc(p.name)}</b> · ${p.notes.length} notas</p>`}
-        <div class="staffbox">${scoreSVG(p.notes.slice(0, 24), { names: true, pos: true, hit: false, W: 420 })}</div>
-        ${p.notes.length > 24 ? `<p class="sub">Vista previa de las primeras 24 notas.</p>` : ''}
-        ${p.warns.map(w => `<div class="msg e">⚠️ ${esc(w)}</div>`).join('')}
-        <p class="sub">Revisa que sea la parte de trombón (clave de fa). La app no cambia la octava ni transpone.</p>
-        <div class="row"><button class="b" id="muse">Reemplazar mi secuencia</button><button class="b sec" id="muapp">Agregar al final</button></div>`;
-        const sel = $('#mpart', root); if (sel) sel.onchange = () => show(+sel.value);
-        $('#muse', root).onclick = () => onUse(p.notes, 'replace', f.name.replace(/\.[^.]+$/, ''));
-        $('#muapp', root).onclick = () => onUse(p.notes, 'append', f.name.replace(/\.[^.]+$/, ''));
-      };
-      show(Math.max(0, usable.findIndex(x => /tromb|tbn|bone/i.test(x.name))));
-    } catch (err) { say('⚠️ ' + esc(err.message), 'e'); }
+    try { present(await readMusicFile(f), f.name, false); } catch (err) { say('⚠️ ' + esc(err.message), 'e'); }
   };
+  return { present, say };
 }
