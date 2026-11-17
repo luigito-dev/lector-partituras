@@ -23,6 +23,7 @@ VIEWS.editor = m => {
    </div><div id="emsg"></div></div>
   <div class="card" id="info"></div>
   <div class="card"><h2>Secuencia</h2><div class="chips" id="seq"></div></div>
+  <details class="card"><summary>🎼 Importar un archivo MusicXML</summary><p class="sub">Para archivos creados con Audiveris, MuseScore u otro programa.</p><div id="mxw"></div></details>
   <div class="card"><h2>Guardar y exportar</h2><div class="row">
    <button class="b" id="sv">💾 Guardar en historial</button><button class="b sec" id="xp">🖼 Descargar imagen (PNG)</button><button class="b sec" id="xd">📄 Descargar PDF</button><button class="b sec" id="xr">🖨 Imprimir</button></div>
    <div id="xmsg"></div></div>`;
@@ -110,5 +111,6 @@ VIEWS.editor = m => {
   $('#xd').onclick = async () => { if (!needNotes()) return; try { xm('Creando PDF…'); await exportPDF(seq(), eo()); xm('✔ PDF creado. Revisa tus descargas.', 'o'); } catch (e) { xm('No se pudo crear el PDF: ' + esc(e.message), 'e'); } };
   $('#xr').onclick = () => { if (!needNotes()) return; printScore(seq(), eo()); };
 
+  mxlWidget($('#mxw'), (notes, mode, name) => { App.seq = mode === 'replace' ? notes.map(n => ({ ...n })) : seq().concat(notes.map(n => ({ ...n }))); if (mode === 'replace' && name && !App.title) App.title = name; App.sel = -1; saveDraft(); render(); });
   drawPicker(); refresh(); ps();
 };

@@ -71,6 +71,8 @@ VIEWS.cargar = m => {
   </div><p class="sub" style="margin-top:8px">En teléfono, “Tomar foto” abre la cámara trasera. En computadora abre el selector de archivos. Formatos: JPG, JPEG, PNG, WebP y PDF (hasta 30 MB).</p>
   <div id="st" role="status" aria-live="polite"></div></div>
   <div id="work"></div>
+  <div class="card"><h2>¿Ya tienes un archivo MusicXML?</h2>
+   <p class="sub">Si conviertes tu foto o PDF con un programa de reconocimiento (por ejemplo Audiveris o MuseScore), puedes importar aquí el resultado (.musicxml, .xml o .mxl) y la app lo convierte en notas editables, con posiciones y sonido.</p><div id="mxw"></div></div>
   <div class="card warn"><b>Lectura automática (OMR): no disponible.</b>
    <p>Esta app no tiene un motor de reconocimiento óptico de partituras. Un motor real necesita un servidor o un servicio de pago con clave privada, y no puede funcionar en una página estática. Por eso <b>no se detectan notas ni se simula el reconocimiento</b>: la imagen que cargas no es “leída”.</p>
    <p>Lo que sí puedes hacer: ver tu partitura al lado del <b>Editor</b>, escribir las notas y escucharlas con su posición de vara.</p></div>`;
@@ -140,5 +142,6 @@ VIEWS.cargar = m => {
     draw();
   }
   $$('input[type=file]', m).forEach(inp => inp.onchange = () => { const fs = [...inp.files]; inp.value = ''; if (fs.length) addFiles(fs); });
+  mxlWidget($('#mxw'), (notes, mode, name) => { App.seq = mode === 'replace' ? notes.map(n => ({ ...n })) : App.seq.concat(notes.map(n => ({ ...n }))); if (mode === 'replace' && name) App.title = name; App.sel = -1; saveDraft(); go('editor'); });
   draw();
 };
